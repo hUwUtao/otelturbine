@@ -1,8 +1,8 @@
 # otelturbine
 
-`otelturbine` is a small OTLP/HTTP to Prometheus remote-write pipeline.
+`otelturbine` is a tiny OTLP/HTTP to Prometheus remote-write pipeline for Bun.
 
-Send OTLP JSON in, apply your own per-request logic (route params, label injection, filtering rules), push to Prometheus-compatible storage.
+Send OTLP JSON in, add your own per-request logic (route params, label injection), and push to Prometheus-compatible storage (Prometheus, VictoriaMetrics, Mimir, etc).
 
 [![npm version](https://img.shields.io/npm/v/otelturbine.svg)](https://www.npmjs.com/package/otelturbine)
 [![license](https://img.shields.io/npm/l/otelturbine.svg)](https://github.com/hUwUtao/otelturbine)
@@ -13,7 +13,7 @@ Send OTLP JSON in, apply your own per-request logic (route params, label injecti
 bun add otelturbine
 ```
 
-## Quick Start
+## Build The Pipeline
 
 ```ts
 import { OtelTurbine } from 'otelturbine';
@@ -36,17 +36,16 @@ const turbine = new OtelTurbine()
   .build();
 ```
 
-## Parameterized Route + Parameterized Injection
+## Parameterized Route + Parameterized Injection (main pattern)
 
-Main flow for custom routing:
+This is the intended usage. You own routing, you own validation, you stamp labels from params.
 
 ```ts
-// /v1/metrics/:name
 app.post('/v1/metrics/:name', async (req, { name }) => {
   if (!valid(name)) return new Response('invalid name', { status: 400 });
 
   const result = await turbine
-    .ingest(req) // creates an isolated request session
+    .ingest(req) // creates an isolated request/session chain
     .inject('*', { instance_name: name })
     .push();
 
@@ -56,7 +55,9 @@ app.post('/v1/metrics/:name', async (req, { name }) => {
 });
 ```
 
-You can also ingest raw body directly:
+### Ingest Raw Body Directly
+
+Useful if your framework doesn’t hand you a native `Request`, or you already buffered the body.
 
 ```ts
 const result = await turbine
@@ -65,17 +66,16 @@ const result = await turbine
   .push();
 ```
 
-## Ownership Model (important)
+## Ownership Model
 
-`ingest(...)` creates a duplicated per-request chain object. That means:
+`ingest(...)` returns a per-request chain. It does not mutate global/built state.
 
 - injection in one request never leaks into another request
-- builder config stays immutable after `.build()`
-- it is safe under concurrency
+- safe under concurrency
 
-## Route Macro (not plugin)
+## Route Macro (not a plugin)
 
-`routeMacro()` gives a framework-agnostic descriptor:
+If your router accepts `{ method, path, handler }`, use `routeMacro()`:
 
 ```ts
 const macro = turbine.routeMacro('/v1/metrics/:name');
@@ -84,27 +84,18 @@ const macro = turbine.routeMacro('/v1/metrics/:name');
 router.on(macro.method, macro.path, macro.handler);
 ```
 
-Use this where your framework accepts explicit method/path/handler registration.
+If your router needs a different handler signature, use the parameterized route pattern above.
 
-## Builder API
+## Schema Rules (short reference)
 
-### `.remoteWrite(url, options?)`
+Schemas are **first match wins**. For a matching metric name:
 
-```ts
-turbine.remoteWrite('http://victoria-metrics:8428/api/v1/write', {
-  timeout: 5000,
-  headers: { 'X-Scope-OrgID': 'tenant-a' },
-});
-```
+- `labels: { key: pattern }`: label must exist and match, or the whole series is dropped
+- `labels: { '*': pattern }`: keep unlisted labels if their values match the pattern (omit `'*'` to drop all unlisted)
+- `inject: { k: v }`: add/override labels after filtering
+- `maxLabels`: cap label count (excluding `__name__`)
 
-### `.defaultAction('pass' | 'drop')`
-
-- `pass`: unmatched metrics continue unchanged (default)
-- `drop`: unmatched metrics are dropped
-
-### `.schema([...])`
-
-First-match-wins metric schema rules.
+Example:
 
 ```ts
 turbine.schema([
@@ -124,40 +115,9 @@ turbine.schema([
 ]);
 ```
 
-### `.build()`
+## Return Codes
 
-Returns a built, immutable pipeline instance.
-
-## Built API
-
-### `.ingest(input, options?)`
-
-Creates an isolated request session chain:
-
-- `.inject(selector, labels)`
-- `.inject(labels)`
-- `.push()`
-
-### `.compat()`
-
-Returns a request-first helper for middleware/router integration:
-
-```ts
-const otelTurbine = turbine.compat();
-await otelTurbine(req).inject('*', { instance_name: 'x' }).push();
-```
-
-### `.routeMacro(path?)`
-
-Returns `{ method, path, handler }` descriptor.
-
-### `.bunRouteHandler()` / `.bunHandler(path?)`
-
-Optional Bun-native integrations.
-
-## Result Codes
-
-`push()` and `Pipeline.process()` return:
+`push()` returns:
 
 - `200`: forwarded successfully
 - `204`: nothing to forward after filtering

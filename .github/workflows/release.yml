@@ -73,11 +73,15 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       # Node is only needed here to drive `npm publish`.
-      # Bun does not yet support `--provenance` natively.
+      # Bun does not yet drive npm trusted publishing natively.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing (OIDC) requires npm CLI >= 11.5.1.
+      - name: Upgrade npm
+        run: npm i -g npm@11.5.1
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -91,9 +95,7 @@ jobs:
       # --provenance links this publish to the exact commit and workflow run,
       # producing a signed SLSA provenance attestation on the npm registry.
       - name: Publish
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
 
   # ── 4. GitHub Release ─────────────────────────────────────────────────────
   github-release:
