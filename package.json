@@ -1,6 +1,6 @@
 {
   "name": "otelturbine",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OTLP/HTTP → Prometheus remote-write pipeline library for Bun",
   "keywords": [
     "otlp",
