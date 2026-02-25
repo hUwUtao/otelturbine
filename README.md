@@ -1,8 +1,6 @@
 # otelturbine
 
-`otelturbine` is a tiny OTLP/HTTP to Prometheus remote-write pipeline for Bun.
-
-Send OTLP JSON in, add your own per-request logic (route params, label injection), and push to Prometheus-compatible storage (Prometheus, VictoriaMetrics, Mimir, etc).
+OTLP/HTTP JSON to Prometheus remote-write pipeline for Bun.
 
 [![npm version](https://img.shields.io/npm/v/otelturbine.svg)](https://www.npmjs.com/package/otelturbine)
 [![license](https://img.shields.io/npm/l/otelturbine.svg)](https://github.com/hUwUtao/otelturbine)
@@ -13,7 +11,7 @@ Send OTLP JSON in, add your own per-request logic (route params, label injection
 bun add otelturbine
 ```
 
-## Build The Pipeline
+## Example
 
 ```ts
 import { OtelTurbine } from 'otelturbine';
@@ -36,57 +34,47 @@ const turbine = new OtelTurbine()
   .build();
 ```
 
-## Parameterized Route + Parameterized Injection (main pattern)
+## Parameterized Route
 
-This is the intended usage. You own routing, you own validation, you stamp labels from params.
+Parameterized route example with route-param label injection:
 
 ```ts
 app.post('/v1/metrics/:name', async (req, { name }) => {
   if (!valid(name)) return new Response('invalid name', { status: 400 });
 
   const result = await turbine
-    .ingest(req) // creates an isolated request/session chain
-    .inject('*', { instance_name: name })
+    .ingest(req)
+    .inject({ instance_name: name })
     .push();
 
-  return new Response(result.message, {
-    status: result.status === 200 ? 204 : result.status,
-  });
+  if (result.status === 200 || result.status === 204) {
+    return new Response(null, { status: 204 });
+  }
+  return new Response(result.message, { status: result.status });
 });
 ```
 
-### Ingest Raw Body Directly
-
-Useful if your framework doesn’t hand you a native `Request`, or you already buffered the body.
+## Ingest From Body
 
 ```ts
 const result = await turbine
   .ingest(body, { contentType: 'application/json' })
-  .inject({ instance_name: 'worker-a' }) // shorthand for selector "*"
+  .inject({ instance_name: 'worker-a' })
   .push();
 ```
 
-## Ownership Model
+`ingest()` returns a per-request chain; injections do not leak across requests.
 
-`ingest(...)` returns a per-request chain. It does not mutate global/built state.
+## Route Macro
 
-- injection in one request never leaks into another request
-- safe under concurrency
-
-## Route Macro (not a plugin)
-
-If your router accepts `{ method, path, handler }`, use `routeMacro()`:
+Route macro descriptor:
 
 ```ts
-const macro = turbine.routeMacro('/v1/metrics/:name');
-// { method: 'POST', path: '/v1/metrics/:name', handler }
-
-router.on(macro.method, macro.path, macro.handler);
+const { method, path, handler } = turbine.routeMacro('/v1/metrics');
+router.on(method, path, handler);
 ```
 
-If your router needs a different handler signature, use the parameterized route pattern above.
-
-## Schema Rules (short reference)
+## Schemas
 
 Schemas are **first match wins**. For a matching metric name:
 
@@ -95,7 +83,7 @@ Schemas are **first match wins**. For a matching metric name:
 - `inject: { k: v }`: add/override labels after filtering
 - `maxLabels`: cap label count (excluding `__name__`)
 
-Example:
+Example schema:
 
 ```ts
 turbine.schema([
@@ -117,7 +105,7 @@ turbine.schema([
 
 ## Return Codes
 
-`push()` returns:
+`push()` returns `{ status, message }`.
 
 - `200`: forwarded successfully
 - `204`: nothing to forward after filtering
