@@ -2,9 +2,26 @@
   "name": "otelturbine",
   "version": "0.1.1",
   "description": "OTLP/HTTP → Prometheus remote-write pipeline library for Bun",
+  "keywords": [
+    "otlp",
+    "opentelemetry",
+    "prometheus",
+    "remote-write",
+    "metrics",
+    "bun",
+    "route-macro"
+  ],
+  "homepage": "https://github.com/hUwUtao/otelturbine#readme",
+  "bugs": {
+    "url": "https://github.com/hUwUtao/otelturbine/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hUwUtao/otelturbine.git"
+  },
+  "license": "MIT",
+  "author": "",
   "type": "module",
-  "module": "index.ts",
-  "types": "index.ts",
   "exports": {
     ".": {
       "bun": "./index.ts",
@@ -13,6 +30,8 @@
       "default": "./dist/index.js"
     }
   },
+  "main": "index.ts",
+  "types": "index.ts",
   "files": [
     "dist",
     "src",
@@ -26,27 +45,18 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun test && bun run build"
   },
-  "keywords": [
-    "otlp",
-    "opentelemetry",
-    "prometheus",
-    "remote-write",
-    "metrics",
-    "bun",
-    "route-macro"
-  ],
-  "license": "MIT",
-  "engines": {
-    "bun": ">=1.0.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+  "dependencies": {
+    "snappy": "^7.3.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.9",
     "mitata": "^1.0.34"
   },
-  "dependencies": {
-    "snappy": "^7.3.3"
-  }
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "module": "index.ts"
 }
