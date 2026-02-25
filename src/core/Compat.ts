@@ -13,7 +13,13 @@ export interface CompatRequestLike {
   text?: () => Promise<string> | string;
 }
 
-export class CompatRequestSession {
+export interface IngestOptions {
+  method?: string;
+  headers?: CompatHeaders;
+  contentType?: string;
+}
+
+export class IngestSession {
   private readonly injectRules: LabelInjectionRule[] = [];
 
   constructor(
@@ -21,9 +27,29 @@ export class CompatRequestSession {
     private readonly req: Request | CompatRequestLike
   ) {}
 
-  injectLabel(selector: LabelInjectionRule['selector'], labels: Record<string, string>): this {
+  inject(selector: LabelInjectionRule['selector'], labels: Record<string, string>): this;
+  inject(labels: Record<string, string>): this;
+  inject(
+    selectorOrLabels: LabelInjectionRule['selector'] | Record<string, string>,
+    maybeLabels?: Record<string, string>
+  ): this {
+    if (
+      typeof selectorOrLabels === 'object' &&
+      selectorOrLabels !== null &&
+      !(selectorOrLabels instanceof RegExp)
+    ) {
+      this.injectRules.push({ selector: '*', labels: { ...selectorOrLabels } });
+      return this;
+    }
+    const selector = selectorOrLabels as LabelInjectionRule['selector'];
+    const labels = maybeLabels ?? {};
     this.injectRules.push({ selector, labels: { ...labels } });
     return this;
+  }
+
+  // Backward-compatible alias
+  injectLabel(selector: LabelInjectionRule['selector'], labels: Record<string, string>): this {
+    return this.inject(selector, labels);
   }
 
   async push(): Promise<PipelineResult> {
@@ -37,10 +63,26 @@ export class CompatRequestSession {
   }
 }
 
-export type CompatHandler = (req: Request | CompatRequestLike) => CompatRequestSession;
+export type CompatHandler = (req: Request | CompatRequestLike) => IngestSession;
 
 export function createCompatHandler(pipeline: Pipeline): CompatHandler {
-  return (req: Request | CompatRequestLike) => new CompatRequestSession(pipeline, req);
+  return (req: Request | CompatRequestLike) => new IngestSession(pipeline, req);
+}
+
+export function createIngestSession(
+  pipeline: Pipeline,
+  input: Request | CompatRequestLike | string | Uint8Array | object | null | undefined,
+  options?: IngestOptions
+): IngestSession {
+  if (input instanceof Request || isCompatRequestLike(input)) {
+    return new IngestSession(pipeline, input as Request | CompatRequestLike);
+  }
+  return new IngestSession(pipeline, {
+    method: options?.method ?? 'POST',
+    headers: options?.headers,
+    contentType: options?.contentType,
+    body: input,
+  });
 }
 
 interface NormalizedRequest {
@@ -73,6 +115,19 @@ async function normalizeRequest(req: Request | CompatRequestLike): Promise<Norma
   if (body === undefined || body === null) return { method, contentType, body: '' };
   if (typeof body === 'object') return { method, contentType, body: JSON.stringify(body) };
   return { method, contentType, body: String(body) };
+}
+
+function isCompatRequestLike(value: unknown): value is CompatRequestLike {
+  if (!value || typeof value !== 'object') return false;
+  if (value instanceof Request) return true;
+  const maybe = value as CompatRequestLike;
+  return (
+    typeof maybe.text === 'function' ||
+    maybe.body !== undefined ||
+    maybe.headers !== undefined ||
+    maybe.contentType !== undefined ||
+    maybe.method !== undefined
+  );
 }
 
 function getHeader(headers: CompatHeaders | undefined, name: string): string | undefined {

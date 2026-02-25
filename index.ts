@@ -7,8 +7,14 @@ export { OtelTurbine, BuiltOtelTurbine } from './src/core/OtelTurbine.ts';
 export { Pipeline } from './src/core/Pipeline.ts';
 export { applyRequestLabelInjections } from './src/core/Pipeline.ts';
 export type { PipelineResult, LabelInjectionRule, ProcessOptions } from './src/core/Pipeline.ts';
-export { createCompatHandler, CompatRequestSession } from './src/core/Compat.ts';
-export type { CompatHandler, CompatRequestLike, CompatHeaders } from './src/core/Compat.ts';
+export { createCompatHandler, createIngestSession, IngestSession } from './src/core/Compat.ts';
+export type {
+  CompatHandler,
+  CompatRequestLike,
+  CompatHeaders,
+  IngestOptions,
+} from './src/core/Compat.ts';
+export type { RouteMacro } from './src/adapters/bun.ts';
 
 // Types
 export type { MetricSchema, LabelPattern, DefaultAction, CompiledSchema } from './src/types/schema.ts';

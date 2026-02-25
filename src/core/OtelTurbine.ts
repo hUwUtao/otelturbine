@@ -9,16 +9,20 @@
 //
 //   Bun.serve({ routes: { '/v1/metrics': { POST: turbine.bunRouteHandler() } } });
 //   Bun.serve({ fetch: turbine.bunHandler() });
-//   new Elysia().use(turbine.elysiaPlugin({ path: '/v1/metrics' }));
 
 import type { MetricSchema, DefaultAction } from '../types/schema.ts';
 import type { RemoteWriteConfig } from './RemoteWriteConfig.ts';
 import { compileSchemas } from '../transform/SchemaEngine.ts';
 import { Pipeline } from './Pipeline.ts';
-import { bunRouteHandler, bunHandler } from '../adapters/bun.ts';
-import { createElysiaPlugin } from '../adapters/elysia.ts';
-import { createCompatHandler } from './Compat.ts';
-import type { CompatHandler } from './Compat.ts';
+import { bunRouteHandler, bunHandler, routeMacro } from '../adapters/bun.ts';
+import type { RouteMacro } from '../adapters/bun.ts';
+import { createCompatHandler, createIngestSession } from './Compat.ts';
+import type {
+  CompatHandler,
+  CompatRequestLike,
+  IngestOptions,
+  IngestSession,
+} from './Compat.ts';
 
 /** OtelTurbine fluent builder. */
 export class OtelTurbine {
@@ -95,23 +99,36 @@ export class BuiltOtelTurbine {
   }
 
   /**
-   * Returns an ElysiaJS plugin that registers the OTLP metrics endpoint.
-   * Elysia is an optional peer dependency; typed as unknown to avoid hard dep.
-   *
-   * Usage: new Elysia().use(turbine.elysiaPlugin({ path: '/v1/metrics' }))
+   * Route macro descriptor for framework-agnostic routing:
+   * `{ method: 'POST', path, handler }`
    */
-  elysiaPlugin(options?: { path?: string }): unknown {
-    return createElysiaPlugin(this.pipeline, options?.path ?? '/v1/metrics');
+  routeMacro(path = '/v1/metrics'): RouteMacro {
+    return routeMacro(this.pipeline, path);
   }
 
   /**
    * Returns a framework-agnostic request adapter.
    * Usage:
    *   const otelTurbine = turbine.compat();
-   *   await otelTurbine(req).injectLabel('*', { instance_name: 'a' }).push();
+   *   await otelTurbine(req).inject('*', { instance_name: 'a' }).push();
    */
   compat(): CompatHandler {
     return createCompatHandler(this.pipeline);
+  }
+
+  /**
+   * Starts an isolated request/session chain.
+   * ingest(...) never mutates builder/global state.
+   *
+   * Usage:
+   *   await turbine.ingest(req).inject('*', { instance_name: name }).push();
+   *   await turbine.ingest(rawJson).inject({ instance_name: name }).push();
+   */
+  ingest(
+    input: Request | CompatRequestLike | string | Uint8Array | object | null | undefined,
+    options?: IngestOptions
+  ): IngestSession {
+    return createIngestSession(this.pipeline, input, options);
   }
 
   /** Direct access to the pipeline for advanced use cases or testing. */

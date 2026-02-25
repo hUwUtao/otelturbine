@@ -4,6 +4,12 @@
 
 import type { Pipeline } from '../core/Pipeline.ts';
 
+export interface RouteMacro {
+  method: 'POST';
+  path: string;
+  handler: (req: Request) => Promise<Response>;
+}
+
 /** Map pipeline status codes to appropriate HTTP responses. */
 function pipelineResultToResponse(status: number, message: string): Response {
   switch (status) {
@@ -58,5 +64,17 @@ export function bunHandler(
     const body = await req.text();
     const result = await pipeline.process(body, contentType);
     return pipelineResultToResponse(result.status, result.message);
+  };
+}
+
+/**
+ * Framework-agnostic route macro descriptor:
+ * `{ method, path, handler }`
+ */
+export function routeMacro(pipeline: Pipeline, path = '/v1/metrics'): RouteMacro {
+  return {
+    method: 'POST',
+    path,
+    handler: bunRouteHandler(pipeline),
   };
 }

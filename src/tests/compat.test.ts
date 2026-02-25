@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import {
   createCompatHandler,
+  createIngestSession,
   type CompatRequestLike,
 } from '../core/Compat.ts';
 import {
@@ -45,7 +46,7 @@ describe('compat handler', () => {
     };
 
     const result = await otelTurbine(req)
-      .injectLabel('*', { instance_name: 'worker-a' })
+      .inject('*', { instance_name: 'worker-a' })
       .push();
 
     expect(result.status).toBe(200);
@@ -74,7 +75,7 @@ describe('compat handler', () => {
       body: '{"resourceMetrics":[]}',
     };
 
-    await otelTurbine(req).injectLabel('*', { instance_name: 'one' }).push();
+    await otelTurbine(req).inject('*', { instance_name: 'one' }).push();
     await otelTurbine(req).push();
 
     expect(injectCounts).toEqual([1, 0]);
@@ -91,6 +92,32 @@ describe('compat handler', () => {
       body: '{}',
     }).push();
     expect(result.status).toBe(405);
+  });
+
+  it('supports ingest(body).inject(...).push() chain', async () => {
+    const calls: number[] = [];
+    const fakePipeline = {
+      process: async (
+        _body: string | Uint8Array,
+        _contentType: string,
+        options?: { injectLabels?: LabelInjectionRule[] }
+      ) => {
+        calls.push(options?.injectLabels?.length ?? 0);
+        return { status: 200, message: 'OK' };
+      },
+    };
+
+    const sessionA = createIngestSession(fakePipeline as never, '{"resourceMetrics":[]}', {
+      contentType: 'application/json',
+    });
+    const sessionB = createIngestSession(fakePipeline as never, '{"resourceMetrics":[]}', {
+      contentType: 'application/json',
+    });
+
+    await sessionA.inject({ instance_name: 'a' }).push();
+    await sessionB.push();
+
+    expect(calls).toEqual([1, 0]);
   });
 });
 
